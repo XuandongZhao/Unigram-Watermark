@@ -2,15 +2,17 @@ import argparse
 import json
 from tqdm import tqdm
 import torch
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, LlamaTokenizer
 from gptwm import GPTWatermarkDetector
 
 
 def main(args):
     with open(args.input_file, 'r') as f:
         data = [json.loads(x) for x in f.read().strip().split("\n")]
-
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, torch_dtype=torch.float16)
+    if 'llama' in args.model_name:
+        tokenizer = LlamaTokenizer.from_pretrained(args.model_name, torch_dtype=torch.float16)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name, torch_dtype=torch.float16)
 
     vocab_size = 50272 if "opt" in args.model_name else tokenizer.vocab_size
 
@@ -42,7 +44,8 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--model_name", type=str, default="facebook/opt-125m")
+    # parser.add_argument("--model_name", type=str, default="facebook/opt-125m")
+    parser.add_argument("--model_name", type=str, default="decapoda-research/llama-7b-hf")
     parser.add_argument("--fraction", type=float, default=0.5)
     parser.add_argument("--strength", type=float, default=2.0)
     parser.add_argument("--threshold", type=float, default=6.0)

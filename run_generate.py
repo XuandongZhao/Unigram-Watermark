@@ -3,7 +3,7 @@ from tqdm import tqdm
 import json
 import torch
 import os
-from transformers import AutoModelForCausalLM, AutoTokenizer, LogitsProcessorList
+from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaTokenizer, LogitsProcessorList
 from gptwm import GPTWatermarkLogitsWarper
 
 
@@ -19,10 +19,11 @@ def write_file(filename, data):
 
 def main(args):
     output_file = f"{args.output_dir}/{args.model_name.replace('/', '-')}_strength_{args.strength}_frac_{args.fraction}_len_{args.max_new_tokens}_num_{args.num_test}.jsonl"
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, torch_dtype=torch.float16)
-    model = AutoModelForCausalLM.from_pretrained(args.model_name).to(device)
+    if 'llama' in args.model_name:
+        tokenizer = LlamaTokenizer.from_pretrained(args.model_name, torch_dtype=torch.float16)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name, torch_dtype=torch.float16)
+    model = AutoModelForCausalLM.from_pretrained(args.model_name, device_map='auto')
     model.eval()
 
     watermark_processor = LogitsProcessorList([GPTWatermarkLogitsWarper(fraction=args.fraction,
@@ -39,10 +40,16 @@ def main(args):
         if idx < num_cur_outputs or len(outputs) >= args.num_test:
             continue
 
-        if "gold_completion" not in cur_data:
+        if "gold_completion" not in cur_data and 'targets' not in cur_data:
             continue
+        elif "gold_completion" in cur_data:
+            prefix = cur_data['prefix']
+            gold_completion = cur_data['gold_completion']
+        else:
+            prefix = cur_data['prefix']
+            gold_completion = cur_data['targets'][0]
 
-        batch = tokenizer(cur_data['prefix'], truncation=True, padding="longest", return_tensors="pt", max_length=1024 - args.max_new_tokens).to(device)
+        batch = tokenizer(prefix, truncation=True, return_tensors="pt")
         num_tokens = len(batch['input_ids'][0])
 
         with torch.inference_mode():
@@ -65,8 +72,8 @@ def main(args):
             gen_text = tokenizer.batch_decode(generation['sequences'][:, num_tokens:], skip_special_tokens=True)
 
         outputs.append(json.dumps({
-            "prefix": cur_data['prefix'],
-            "gold_completion": cur_data['gold_completion'],
+            "prefix": prefix,
+            "gold_completion": gold_completion,
             "gen_completion": gen_text
         }))
 
@@ -81,14 +88,15 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--model_name", type=str, default="facebook/opt-125m")
+    # parser.add_argument("--model_name", type=str, default="facebook/opt-125m")
+    parser.add_argument("--model_name", type=str, default="decapoda-research/llama-7b-hf")
     parser.add_argument("--fraction", type=float, default=0.5)
     parser.add_argument("--strength", type=float, default=2.0)
     parser.add_argument("--wm_key", type=int, default=0)
-    parser.add_argument("--prompt_file", type=str, default="./data/example.jsonl")
-    parser.add_argument("--output_dir", type=str, default="./data")
+    parser.add_argument("--prompt_file", type=str, default="./data/LFQA/inputs.jsonl")
+    parser.add_argument("--output_dir", type=str, default="./data/LFQA/")
     parser.add_argument("--max_new_tokens", type=int, default=300)
-    parser.add_argument("--num_test", type=int, default=1000)
+    parser.add_argument("--num_test", type=int, default=500)
     parser.add_argument("--beam_size", type=int, default=None)
     parser.add_argument("--top_k", type=int, default=None)
     parser.add_argument("--top_p", type=float, default=0.9)
