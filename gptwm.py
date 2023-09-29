@@ -1,7 +1,7 @@
 import hashlib
 from typing import List
-
 import numpy as np
+from scipy.stats import norm
 import torch
 from transformers import LogitsWarper
 
@@ -71,9 +71,37 @@ class GPTWatermarkDetector(GPTWatermarkBase):
     def _z_score(num_green: int, total: int, fraction: float) -> float:
         """Calculate and return the z-score of the number of green tokens in a sequence."""
         return (num_green - fraction * total) / np.sqrt(fraction * (1 - fraction) * total)
+    
+    @staticmethod
+    def _compute_tau(m: int, N: int, alpha: float) -> float:
+        """
+        Compute the threshold tau for the dynamic thresholding.
+
+        Args:
+            m: The number of unique tokens in the sequence.
+            N: Vocabulary size.
+            alpha: The false positive rate to control.
+        Returns:
+            The threshold tau.
+        """
+        factor = np.sqrt(1 - (m - 1) / (N - 1))
+        tau = factor * norm.ppf(1 - alpha)
+        return tau
 
     def detect(self, sequence: List[int]) -> float:
         """Detect the watermark in a sequence of tokens and return the z value."""
         green_tokens = int(sum(self.green_list_mask[i] for i in sequence))
 
         return self._z_score(green_tokens, len(sequence), self.fraction)
+
+    def unidetect(self, sequence: List[int]) -> float:
+        """Detect the watermark in a sequence of tokens and return the z value. Just for unique tokens."""
+        sequence = list(set(sequence))
+        green_tokens = int(sum(self.green_list_mask[i] for i in sequence))
+        return self._z_score(green_tokens, len(sequence), self.fraction)
+    
+    def dynamic_threshold(self, sequence: List[int], alpha: float, vocab_size: int) -> (bool, float):
+        """Dynamic thresholding for watermark detection. True if the sequence is watermarked, False otherwise."""
+        z_score = self.unidetect(sequence)
+        tau = self._compute_tau(len(list(set(sequence))), vocab_size, alpha)
+        return z_score > tau, z_score
