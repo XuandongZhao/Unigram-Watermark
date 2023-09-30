@@ -1,4 +1,4 @@
-# GPTWatermark
+# Unigram-Watermark
 
 This repository contains the code for the paper [Provable Robust Watermarking for AI-Generated Text](https://arxiv.org/abs/2306.17439).
 
