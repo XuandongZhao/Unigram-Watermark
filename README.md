@@ -2,6 +2,8 @@
 
 This repository contains the code for the paper [Provable Robust Watermarking for AI-Generated Text](https://arxiv.org/abs/2306.17439).
 
+**🔍 [HuggingFace Demo](https://huggingface.co/spaces/Xuandong/Unigram-Watermark)**
+
 If you find this repository useful, please cite our paper:
 
 ```
